@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Direction Test</title>
+    <style>
+    	html, body {
+			  height: 100%;
+			  margin: 0;
+			  padding: 0;
+			}
+
+			#map_canvas {
+			  height: 100%;
+			}
+
+			@media print {
+			  html, body {
+ 			   height: auto;
+ 			 }
+
+ 			 #map_canvas {
+			    height: 650px;
+			  }
+			}
+    	
+      #control {
+        background: #fff;
+        padding: 5px;
+        font-size: 14px;
+        font-family: Arial;
+        border: 1px solid #ccc;
+        box-shadow: 0 2px 2px rgba(33, 33, 33, 0.4);
+        display: none;
+      }
+    </style>
+   	<script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?key=Enter_Your_Key_Here&sensor=false">
+    </script>
+    <script>
+			function readFile(filename){
+				var fso = new ActiveXObject("Scripting.FileSystemObject");
+				var f = fso.OpenTextFile(filename,1);
+				var s = "";
+				var t = [];
+				var r = [];
+				var m = 0;
+				var last = 0;
+				var now = 0;
+				var time = parseInt(document.getElementById('interval').value, 10);
+				var interval = 0;
+				var line = parseInt(document.getElementById('line').value, 10);
+				var l = 0;
+				while (!f.AtEndOfStream){
+					s = f.ReadLine();
+					l++;
+					if( l < line ){
+						continue;
+					}
+					t = s.split(',');
+					if( t.length < 8 ) continue;
+					m = t[1].indexOf('2');
+					if( m == -1 )continue;
+					now = Date.parse(t[1]);
+					interval = (now - last)/1000;
+					if( interval >= time ){
+						last = now;
+					}
+					else{
+						continue;
+					}
+					r.push(l.toString()+','+t[1]+','+t[3]+' '+t[2]);
+				}
+				f.Close();
+				return r;
+			}
+		</script>
+    <script>
+      var map;
+      var info = [];
+      var points = [];
+      var step = 0;
+      var routePath;
+      var lastC;
+      var markersArray = [];
+
+      function initialize() {
+        
+        var c = new google.maps.LatLng(0.000000, 150.000000);
+        var mapOptions = {
+          zoom: 3,
+          mapTypeId: google.maps.MapTypeId.SATELLITE,
+          center: c
+        }
+        map = new google.maps.Map(document.getElementById('map_canvas'), mapOptions);
+        
+        var control = document.getElementById('control');
+        control.style.display = 'block';
+        map.controls[google.maps.ControlPosition.TOP].push(control);
+        
+        routePath = new google.maps.Polyline({
+        	strokeColor: "#FF0000",
+        	strokeOpacity: 1.0,
+        	strokeWeight: 2
+        	});
+        
+				google.maps.event.addListener(map, 'click', function() {
+			    draw();
+				  });
+      }
+
+      function prepare() {
+      	
+      	clearOverlays();
+      	info = [];
+      	points = [];
+      	step = 0;
+      	
+      	var last_time = "";
+      	var routeInfo = readFile(document.getElementById('in').value);
+      	
+      	for (var t = 0; t < routeInfo.length; t++) {
+      		
+      		var tmp = routeInfo[t].split(',');
+      		var interval = 0;
+      		if( t > 0 ){
+      			var time2 = Date.parse(tmp[1]);
+      			var time1 = Date.parse(last_time);
+      			interval = (time2 - time1)/1000;
+      		}
+      		info.push(tmp[0]+': '+tmp[1]+'\n'+tmp[2]+'\nPast Time: '+ interval + ' s');
+      		points.push(tmp[2]);
+      		last_time = tmp[1];
+      	}
+      	
+      	if( points.length > 0 ){
+      		var tll = points[step].split(' ');
+      		lastC = new google.maps.LatLng(tll[0], tll[1]);
+      		draw();
+      	}
+      }
+      
+      function draw() {
+      	
+      	if( step < points.length ){
+      		
+      		var tll = points[step].split(' ');
+      		var c = new google.maps.LatLng(tll[0], tll[1]);
+      		
+      		if( map.getZoom() < 10 ){
+      			map.setZoom(15);
+      		}
+      		
+      		var speed = 1;
+      		var lat = (c.lat() - lastC.lat())/speed;
+      		var lng = (c.lng() - lastC.lng())/speed;
+      		for( var s = 1; s <= speed; s++ ){
+      			var step_lat = lastC.lat() + lat*s;
+      			var step_lng = lastC.lng() + lng*s;
+      			var step_c = new google.maps.LatLng(step_lat, step_lng);
+			    	map.setCenter(step_c);
+			  	}
+			    
+			    lastC = new google.maps.LatLng(c.lat(), c.lng());
+			    
+					addMarker(c, info[step]);
+
+     	  	var path = routePath.getPath();
+     	  	path.push(c);
+
+        	routePath.setMap(map);
+        	step++;
+      	}
+      }
+      
+			function addMarker(location, info) {
+ 			 marker = new google.maps.Marker({
+ 			   position: location,
+ 			   title: info,
+ 			   map: map
+			  });
+			  markersArray.push(marker);
+			}
+
+			// Removes the overlays from the map, but keeps them in the array
+			function clearOverlays() {
+				
+				routePath.setMap(null);
+        routePath.getPath().clear();
+				
+			  if (markersArray) {
+			    for (i in markersArray) {
+ 			     markersArray[i].setMap(null);
+ 			   }
+			  }
+			  markersArray.length = 0;
+			}        
+    </script>
+  </head>
+  <body onload="initialize()">
+	<div id="control">
+    <b>Input File: </b>
+    <input type="file" id="in" name="in" />
+		<b>Start Line: </b>
+    <input type="text" id="line" name="line" value="0" size="1" />
+    <b>Interval(s): </b>
+    <input type="text" id="interval" name="interval" value="20" size="1" />
+		<input type="button" value="Route" onclick="prepare();"/>
+    </div>
+  <div id="map_canvas"></div>
+  </body>
+</html>
